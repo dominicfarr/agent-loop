@@ -360,9 +360,10 @@ pick_next() {
 open_agent_issue() { _oldest_open agent; }
 open_bug_issue()   { _oldest_open bug; }
 
-# Prints "true"/"false": does issue N carry LABEL?
+# Prints "true"/"false": does issue N carry LABEL? (real `gh --jq` takes a
+# single expression; LABEL is a fixed vocabulary — todo/agent/blocked/bug.)
 issue_has_label() {
-  gh issue view "$1" --json labels --jq --arg L "$2" 'any(.labels[]?; .name==$L)'
+  gh issue view "$1" --json labels --jq "any(.labels[]?; .name == \"$2\")"
 }
 
 # Claim: status label -> agent (leaving a `bug` marker intact for fix items),
