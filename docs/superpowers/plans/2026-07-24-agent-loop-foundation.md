@@ -56,7 +56,7 @@ idempotently and non-destructively.
 **Interfaces:**
 - Produces: an installable plugin named `agent-loop` in a marketplace named `rsi-agent-loop`. Later tasks add `commands/`, `scripts/`, `templates/` under `plugins/agent-loop/` (auto-discovered).
 
-- [ ] **Step 1: Write the marketplace manifest**
+- [x] **Step 1: Write the marketplace manifest**
 
 Create `.claude-plugin/marketplace.json`:
 
@@ -70,7 +70,7 @@ Create `.claude-plugin/marketplace.json`:
 }
 ```
 
-- [ ] **Step 2: Write the plugin manifest**
+- [x] **Step 2: Write the plugin manifest**
 
 Create `plugins/agent-loop/.claude-plugin/plugin.json`:
 
@@ -83,12 +83,12 @@ Create `plugins/agent-loop/.claude-plugin/plugin.json`:
 }
 ```
 
-- [ ] **Step 3: Validate the plugin structure**
+- [x] **Step 3: Validate the plugin structure**
 
 Dispatch the `plugin-dev:plugin-validator` agent against `plugins/agent-loop/`.
 Expected: no structural errors (manifest valid; name matches). Fix anything it flags.
 
-- [ ] **Step 4: Install locally and confirm discovery**
+- [x] **Step 4: Install locally and confirm discovery**
 
 In a Claude Code session, add the marketplace and install the plugin:
 
@@ -99,7 +99,7 @@ In a Claude Code session, add the marketplace and install the plugin:
 
 Expected: install succeeds. (No commands yet — Task 2 adds `/agent-loop-init`. If the CLI reports the plugin has zero components, that's fine at this step.)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add .claude-plugin/marketplace.json plugins/agent-loop/.claude-plugin/plugin.json
@@ -122,7 +122,7 @@ git commit -m "feat(plugin): scaffold agent-loop marketplace and manifest"
 **Interfaces:**
 - Produces: `init.sh` exposing `ensure_git`, `drop_files`, `set_commit_template`, `has_remote`, `has_github_repo`, `create_labels`, and a state-aware `main` (guarded so the file is sourceable in tests). `main` always runs the safe local half (`ensure_git` → `drop_files` → `set_commit_template`) and creates labels only when `has_github_repo`; otherwise it exits 0 reporting *labels pending*. `drop_files` is non-destructive (existence-guarded copy — portable) and drops five files (2 issue templates, marker, `CONTRIBUTING.md`, `.gitmessage`). Task 3 wires the command (offer-to-create-repo on confirm).
 
-- [ ] **Step 1: Write the template sources**
+- [x] **Step 1: Write the template sources**
 
 Create `plugins/agent-loop/templates/work-item.md`:
 
@@ -189,7 +189,7 @@ cp CONTRIBUTING.md plugins/agent-loop/templates/CONTRIBUTING.md
 cp .gitmessage     plugins/agent-loop/templates/gitmessage
 ```
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 Create `plugins/agent-loop/scripts/test/init_test.sh`:
 
@@ -221,12 +221,12 @@ drop_files "$tmp"
 echo "PASS"
 ```
 
-- [ ] **Step 3: Run the test to verify it fails**
+- [x] **Step 3: Run the test to verify it fails**
 
 Run: `bash plugins/agent-loop/scripts/test/init_test.sh`
 Expected: FAIL — `init.sh` does not exist yet (source error / `drop_files: command not found`).
 
-- [ ] **Step 4: Write the minimal `init.sh`**
+- [x] **Step 4: Write the minimal `init.sh`**
 
 Create `plugins/agent-loop/scripts/init.sh`:
 
@@ -309,12 +309,12 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
 fi
 ```
 
-- [ ] **Step 5: Run the test to verify it passes**
+- [x] **Step 5: Run the test to verify it passes**
 
 Run: `bash plugins/agent-loop/scripts/test/init_test.sh`
 Expected: `PASS`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add plugins/agent-loop/scripts/init.sh plugins/agent-loop/scripts/test/init_test.sh plugins/agent-loop/templates
@@ -332,7 +332,7 @@ git commit -m "feat(init): non-destructive file-drop bootstrap with tests"
 - Consumes: `scripts/init.sh` (`main`, `create_labels`) from Task 2.
 - Produces: the `/agent-loop-init` slash command. `${CLAUDE_PLUGIN_ROOT}` resolves to `plugins/agent-loop/` at runtime, so the command calls `${CLAUDE_PLUGIN_ROOT}/scripts/init.sh`.
 
-- [ ] **Step 1: Write the command**
+- [x] **Step 1: Write the command**
 
 Create `plugins/agent-loop/commands/agent-loop-init.md`:
 
@@ -359,7 +359,7 @@ Adopt the current repository into the agent-loop work queue.
    existing files were left untouched (non-destructive).
 ```
 
-- [ ] **Step 2: Reinstall and confirm the command is discoverable**
+- [x] **Step 2: Reinstall and confirm the command is discoverable**
 
 ```
 /plugin marketplace update rsi-agent-loop
@@ -367,7 +367,7 @@ Adopt the current repository into the agent-loop work queue.
 
 Expected: `/agent-loop-init` now appears in the command list (`/help` or typing `/agent-loop`).
 
-- [ ] **Step 3: Functional test against a throwaway GitHub repo**
+- [x] **Step 3: Functional test against a throwaway GitHub repo**
 
 Create a scratch repo, run the command's script against it, and assert state.
 Run:
@@ -386,18 +386,18 @@ Expected: labels include `agent blocked bug todo`; the issue templates,
 `.claude/agent-loop.json`, `CONTRIBUTING.md`, and `.gitmessage` all exist;
 `commit.template` prints `.gitmessage`.
 
-- [ ] **Step 4: Verify idempotency**
+- [x] **Step 4: Verify idempotency**
 
 Run the same `init.sh` line again.
 Expected: exit 0, no errors (labels `--force`-updated, files skipped by `cp -n`).
 
-- [ ] **Step 5: Tear down the scratch repo**
+- [x] **Step 5: Tear down the scratch repo**
 
 ```bash
 gh repo delete rsi-agent-loop-smoketest --yes
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add plugins/agent-loop/commands/agent-loop-init.md
@@ -414,7 +414,7 @@ git commit -m "feat(init): add /agent-loop-init command wired to bootstrap"
 **Interfaces:**
 - Consumes: everything above (marketplace name `rsi-agent-loop`, plugin `agent-loop`, command `/agent-loop-init`).
 
-- [ ] **Step 1: Replace the "Next step" stub with real install/usage docs**
+- [x] **Step 1: Replace the "Next step" stub with real install/usage docs**
 
 In `README.md`, replace the `## Next step` section with:
 
@@ -441,7 +441,7 @@ idempotent and never overwrites existing files.
 > [docs/superpowers/specs/2026-07-24-agent-loop-design.md](docs/superpowers/specs/2026-07-24-agent-loop-design.md).
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add README.md
