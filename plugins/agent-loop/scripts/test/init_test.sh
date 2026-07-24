@@ -22,4 +22,20 @@ drop_files "$tmp"
 [ "$(cat "$tmp/.github/ISSUE_TEMPLATE/work-item.md")" = "CUSTOM" ] \
   || fail "drop_files overwrote an existing template"
 
+# --- ensure_git initializes a bare (non-git) directory ---
+bare="$(mktemp -d)"
+ensure_git "$bare"
+[ -d "$bare/.git" ] || fail "ensure_git did not create .git"
+rm -rf "$bare"
+
+# --- main on a repo with NO remote: local success, labels pending, exit 0 ---
+noremote="$(mktemp -d)"
+out="$( main "$noremote" 2>&1 )" || fail "main aborted on a no-remote repo"
+[ -d "$noremote/.git" ]                    || fail "main did not init git"
+[ -f "$noremote/CONTRIBUTING.md" ]         || fail "main did not drop files"
+[ "$(git -C "$noremote" config --local --get commit.template)" = ".gitmessage" ] \
+  || fail "main did not set commit.template"
+printf '%s' "$out" | grep -qi "pending"    || fail "main did not report labels pending"
+rm -rf "$noremote"
+
 echo "PASS"

@@ -11,6 +11,14 @@ idempotently and non-destructively.
 
 **Tech Stack:** Claude Code plugin format (JSON manifests + markdown commands), Bash (bootstrap script, `set -euo pipefail`), `gh` CLI (labels), plain-bash test harness (no external test deps).
 
+> **Revision (state-aware init, option C):** after a smoke test in a bare
+> folder surfaced that labels need a GitHub repo to exist, `init` was made
+> state-aware — it always runs the safe local half (`git init` → drop files →
+> set `commit.template`) and gates label creation on a resolvable GitHub repo,
+> reporting *labels pending* otherwise; the command offers to create the repo on
+> confirm. The listings below reflect the final shape; `scripts/init.sh` and its
+> tests are the source of truth.
+
 ## Global Constraints
 
 - **Distribution is private** — a local dir or RSI-org marketplace. No OSS. (Design §Distribution)
@@ -112,7 +120,7 @@ git commit -m "feat(plugin): scaffold agent-loop marketplace and manifest"
 - Create: `plugins/agent-loop/templates/gitmessage`
 
 **Interfaces:**
-- Produces: `init.sh` exposing shell functions `drop_files <target_dir>`, `set_commit_template <target_dir>`, and `create_labels`, and a `main` guarded so the file is sourceable in tests (`main` runs only when executed directly). `drop_files` is non-destructive (existence-guarded copy — portable) and drops five files (2 issue templates, marker, `CONTRIBUTING.md`, `.gitmessage`). Task 3 consumes `create_labels`/`set_commit_template` and wires the command.
+- Produces: `init.sh` exposing `ensure_git`, `drop_files`, `set_commit_template`, `has_remote`, `has_github_repo`, `create_labels`, and a state-aware `main` (guarded so the file is sourceable in tests). `main` always runs the safe local half (`ensure_git` → `drop_files` → `set_commit_template`) and creates labels only when `has_github_repo`; otherwise it exits 0 reporting *labels pending*. `drop_files` is non-destructive (existence-guarded copy — portable) and drops five files (2 issue templates, marker, `CONTRIBUTING.md`, `.gitmessage`). Task 3 wires the command (offer-to-create-repo on confirm).
 
 - [ ] **Step 1: Write the template sources**
 
@@ -246,6 +254,17 @@ drop_files() {
   copy_if_absent "$AGENT_LOOP_ROOT/templates/gitmessage"      "$target/.gitmessage"
 }
 
+ensure_git() {
+  local target="$1"
+  [ -d "$target/.git" ] || git -C "$target" init -q
+}
+
+# True only if this directory resolves to a GitHub repo gh can act on.
+has_github_repo() { gh repo view --json nameWithOwner >/dev/null 2>&1; }
+
+# True if an 'origin' remote is configured (offline-safe).
+has_remote() { git remote get-url origin >/dev/null 2>&1; }
+
 create_labels() {
   # --force makes this idempotent (create or update); colours/descriptions fixed.
   gh label create todo    -c "0E8A16" -d "Ready for the agent to pick up"          --force
@@ -262,10 +281,26 @@ set_commit_template() {
 
 main() {
   local target="${1:-$(pwd)}"
+  target="$(cd "$target" && pwd)"   # absolutize so subshell cd's are stable
+
+  # --- safe local half: always runs, never destructive ---
+  ensure_git "$target"
   drop_files "$target"
   set_commit_template "$target"
-  create_labels
-  echo "agent-loop: initialized $target"
+
+  # --- gated remote half: labels need a GitHub repo to exist ---
+  if ( cd "$target" && has_github_repo ); then
+    ( cd "$target" && create_labels )
+    echo "agent-loop: initialized $target (git, files, commit-template, labels)"
+  elif ( cd "$target" && has_remote ); then
+    echo "agent-loop: local init complete for $target (git, files, commit-template)."
+    echo "An 'origin' remote exists but GitHub can't resolve it (auth or offline?)."
+    echo "Fix that, then re-run to add the labels (pending)."
+  else
+    echo "agent-loop: local init complete for $target (git, files, commit-template)."
+    echo "No GitHub repo yet, so labels are pending. Create one, then re-run:"
+    echo "  gh repo create <name> --source=. --remote=origin --private"
+  fi
 }
 
 # Only run main when executed directly, so tests can source the functions.

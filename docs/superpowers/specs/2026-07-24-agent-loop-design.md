@@ -70,6 +70,15 @@ works from.
 template. What the project *is* and how it deploys is a free choice, established
 later by the walking skeleton.
 
+**`init` is state-aware (option C).** It always runs the safe **local half** —
+`git init` if the folder isn't a repo yet, drop the files, set `commit.template`
+— and creates the labels only if a GitHub repo already resolves for the
+directory. With no repo yet it stops short, reports *labels pending*, and the
+command **offers to create the repo** (`gh repo create --source=. --remote=origin
+--private`, on confirm) before re-running to finish. Re-running is idempotent.
+So a bare new folder is a valid starting point, and repo *creation* is a
+confirmed step — never automatic.
+
 ### Isolation model — "islands"
 
 Standalone projects consuming nothing from shared product envs. Isolation tiers,
@@ -243,6 +252,9 @@ yet, and is where the free deploy-target choice gets made real.
 - **Gate discovery — ANSWERED.** CI gates are self-declaring (verify watches the
   aggregate `ci/**` run); local gates via a project convention (a check
   command / marker-config list).
+- **`init` preconditions — ANSWERED (option C).** A bare folder is fine: the
+  local half always runs; labels gate on a resolvable GitHub repo; repo-creation
+  is a confirmed command step. See §Per-repo footprint.
 - **Fresh-repo detection** (→ run Inception): marker absence / empty-repo
   heuristic — confirm during implementation.
 - **grill-me invocation** — explicit command (`/agent-loop shape`) vs. auto on a
