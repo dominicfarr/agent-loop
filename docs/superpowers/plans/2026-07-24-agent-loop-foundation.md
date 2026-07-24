@@ -112,7 +112,7 @@ git commit -m "feat(plugin): scaffold agent-loop marketplace and manifest"
 - Create: `plugins/agent-loop/templates/gitmessage`
 
 **Interfaces:**
-- Produces: `init.sh` exposing shell functions `drop_files <target_dir>`, `set_commit_template <target_dir>`, and `create_labels`, and a `main` guarded so the file is sourceable in tests (`main` runs only when executed directly). `drop_files` is non-destructive (`cp -n`) and drops five files (2 issue templates, marker, `CONTRIBUTING.md`, `.gitmessage`). Task 3 consumes `create_labels`/`set_commit_template` and wires the command.
+- Produces: `init.sh` exposing shell functions `drop_files <target_dir>`, `set_commit_template <target_dir>`, and `create_labels`, and a `main` guarded so the file is sourceable in tests (`main` runs only when executed directly). `drop_files` is non-destructive (existence-guarded copy — portable) and drops five files (2 issue templates, marker, `CONTRIBUTING.md`, `.gitmessage`). Task 3 consumes `create_labels`/`set_commit_template` and wires the command.
 
 - [ ] **Step 1: Write the template sources**
 
@@ -230,15 +230,20 @@ set -euo pipefail
 
 AGENT_LOOP_ROOT="${AGENT_LOOP_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 
+copy_if_absent() {
+  # Non-destructive and portable: BSD `cp -n` returns non-zero when it skips an
+  # existing file, which trips `set -e`. Guard on existence instead.
+  [ -e "$2" ] || cp "$1" "$2"
+}
+
 drop_files() {
   local target="$1"
   mkdir -p "$target/.github/ISSUE_TEMPLATE" "$target/.claude"
-  # cp -n = never overwrite existing files (non-destructive / additive)
-  cp -n "$AGENT_LOOP_ROOT/templates/work-item.md" "$target/.github/ISSUE_TEMPLATE/work-item.md"
-  cp -n "$AGENT_LOOP_ROOT/templates/bug.md"       "$target/.github/ISSUE_TEMPLATE/bug.md"
-  cp -n "$AGENT_LOOP_ROOT/templates/agent-loop.json" "$target/.claude/agent-loop.json"
-  cp -n "$AGENT_LOOP_ROOT/templates/CONTRIBUTING.md" "$target/CONTRIBUTING.md"
-  cp -n "$AGENT_LOOP_ROOT/templates/gitmessage"      "$target/.gitmessage"
+  copy_if_absent "$AGENT_LOOP_ROOT/templates/work-item.md"    "$target/.github/ISSUE_TEMPLATE/work-item.md"
+  copy_if_absent "$AGENT_LOOP_ROOT/templates/bug.md"          "$target/.github/ISSUE_TEMPLATE/bug.md"
+  copy_if_absent "$AGENT_LOOP_ROOT/templates/agent-loop.json" "$target/.claude/agent-loop.json"
+  copy_if_absent "$AGENT_LOOP_ROOT/templates/CONTRIBUTING.md" "$target/CONTRIBUTING.md"
+  copy_if_absent "$AGENT_LOOP_ROOT/templates/gitmessage"      "$target/.gitmessage"
 }
 
 create_labels() {
@@ -415,7 +420,7 @@ git commit -m "docs: install and adopt-a-repo instructions"
 **Spec coverage (Plan 1's slice):**
 - Plugin scaffold + private marketplace → Task 1. ✅
 - Per-repo footprint (labels + marker + templates + CONTRIBUTING.md/.gitmessage + commit.template) → Tasks 2–3. ✅
-- Non-destructive / additive → Task 2 (`cp -n`, tested). ✅
+- Non-destructive / additive → Task 2 (existence-guarded copy, tested — TDD caught BSD `cp -n`'s skip-exit). ✅
 - Stack-agnostic init → no template scaffolding anywhere. ✅
 - Exact label set `todo/agent/blocked/bug` → Task 2 `create_labels`, asserted in Task 3. ✅
 - `/work-queue`, grill-me, walking-skeleton, fixing-mode → **intentionally out of Plan 1** (Plans 2–3).

@@ -1,0 +1,20 @@
+# <type>(<scope>): <summary — imperative, ≤50 chars, no period>
+#
+# ── Body (wrap ~72 chars) ───────────────────────────────────────────
+# Explain WHY this change is needed and any non-obvious decisions.
+# The diff already shows *what* changed; the message preserves *why*.
+#
+#
+# ── Footer ──────────────────────────────────────────────────────────
+# Refs: #123            (or "Fixes #123" to auto-close)
+# BREAKING CHANGE: describe the incompatibility, if any
+# Co-Authored-By: Name <email>
+#
+# ── Types ───────────────────────────────────────────────────────────
+#   feat      new feature                refactor  neither fix nor feat
+#   fix       bug fix                     perf      performance
+#   docs      documentation only          test      tests
+#   build     build system / deps         ci        CI config
+#   chore     tooling, housekeeping
+#
+# Rule: one logical change per commit. Lines starting with # are ignored.
