@@ -1,0 +1,6 @@
+{
+  "name": "agent-loop",
+  "description": "Autonomous GitHub-issue work-queue development loop: drain the queue, gate pre-push on trunk, self-heal on trunk breakage. Centrally maintained.",
+  "version": "0.1.0",
+  "author": { "name": "Dommo" }
+}

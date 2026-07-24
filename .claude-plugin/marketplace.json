@@ -1,0 +1,7 @@
+{
+  "name": "rsi-agent-loop",
+  "owner": { "name": "Dommo" },
+  "plugins": [
+    { "name": "agent-loop", "source": "./plugins/agent-loop" }
+  ]
+}
