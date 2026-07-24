@@ -1,29 +1,32 @@
 # agent-loop
 
 A reusable **agentic development-loop system**: a GitHub-issue work queue that a
-Claude Code agent drains autonomously, packaged so the same loop can be dropped
-into any project — new or existing — and improved in one place so every project
-that uses it picks up the improvements.
+Claude Code agent drains autonomously, packaged as a plugin so the same loop
+drops into any project and is improved in one place — every project that adopts
+it picks up the improvements.
 
-> **Status: design pending.** This repo was just scaffolded as a clean, standalone
-> home for the work. Nothing about the architecture or distribution mechanism is
-> settled yet — that's the next session's job.
+## Install (per machine)
 
-## Where this came from
+```
+/plugin marketplace add /Users/dfarr/RSI/agent-loop
+/plugin install agent-loop@rsi-agent-loop
+```
 
-The working reference implementation lives in a sibling repo:
+Update to pick up loop improvements: `/plugin marketplace update rsi-agent-loop`.
 
-- `../jackpot-watcher/.claude/skills/work-queue/SKILL.md` — the loop protocol
-- `../jackpot-watcher/docs/ard/0001-work-branch-direct-push.md`
-- `../jackpot-watcher/docs/ard/0002-agent-work-queue.md`
-- `../jackpot-watcher/docs/superpowers/specs/2026-07-13-agent-work-queue-design.md`
-- `../jackpot-watcher/.github/ISSUE_TEMPLATE/work-item.md`
+## Adopt a repo
 
-That version is bespoke to one repo. The goal here is to lift the pattern out into
-something installable and centrally maintained.
+In any repo you want the loop to drain, run `/agent-loop-init`. It creates the
+kanban labels (`todo`/`agent`/`blocked`/`bug`), drops the work-item and bug
+issue templates and a lean `CONTRIBUTING.md` + `.gitmessage` (pointing
+`commit.template` at it), and writes a `.claude/agent-loop.json` marker. It is
+idempotent and never overwrites existing files.
 
-## Next step
+## Design & roadmap
 
-Open a fresh Claude Code session **in this repo** and start the brainstorm — e.g.
-"Let's design the agent-loop system: how to distribute this work-queue loop into
-any project and retro-apply it to existing ones."
+The full design — a trunk-based loop with pre-push gating, self-healing on trunk
+breakage, and a phased spine of tuned agents (grill-me, walking-skeleton) and
+cross-cutting skills (TDD) — lives in
+[the design spec](docs/superpowers/specs/2026-07-24-agent-loop-design.md), with
+deferred scope in [feature-ideas](docs/feature-ideas.md). Adoption
+(`/agent-loop-init`) ships first; `/work-queue` and the phase agents follow.
