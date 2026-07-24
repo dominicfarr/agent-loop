@@ -14,7 +14,8 @@ idempotently and non-destructively.
 ## Global Constraints
 
 - **Distribution is private** — a local dir or RSI-org marketplace. No OSS. (Design §Distribution)
-- **Per-repo footprint is minimal:** labels `todo`/`agent`/`blocked`/`bug`, a `.claude/agent-loop.json` marker, and work-item + bug issue templates. Nothing else. (Design §Per-repo footprint)
+- **Per-repo footprint is minimal:** labels `todo`/`agent`/`blocked`/`bug`, a `.claude/agent-loop.json` marker, work-item + bug issue templates, and a lean `CONTRIBUTING.md` + `.gitmessage` (commit conventions). Nothing else. (Design §Per-repo footprint)
+- **Commit convention:** Conventional Commits; every work-item commit footer carries `Refs: #N`. (CONTRIBUTING.md)
 - **`init` is stack-agnostic** — it never scaffolds a language/deploy template. (Design §Per-repo footprint)
 - **Retro-apply is out of scope** — but `init` must still be **non-destructive**: never overwrite an existing template or clobber a label's meaning. (Design §Out of scope; additive principle)
 - **Label set is exactly:** `todo`, `agent`, `blocked`, `bug`. (Design §Kanban states)
@@ -32,6 +33,8 @@ idempotently and non-destructively.
 - Create: `plugins/agent-loop/templates/work-item.md` — work-item issue template source
 - Create: `plugins/agent-loop/templates/bug.md` — bug (fixing-mode) issue template source
 - Create: `plugins/agent-loop/templates/agent-loop.json` — marker/config template source
+- Create: `plugins/agent-loop/templates/CONTRIBUTING.md` — lean contribution guide (dropped into target)
+- Create: `plugins/agent-loop/templates/gitmessage` — commit template (dropped as `.gitmessage`)
 - Modify: `README.md` — install + usage section
 
 ---
@@ -105,9 +108,11 @@ git commit -m "feat(plugin): scaffold agent-loop marketplace and manifest"
 - Create: `plugins/agent-loop/templates/work-item.md`
 - Create: `plugins/agent-loop/templates/bug.md`
 - Create: `plugins/agent-loop/templates/agent-loop.json`
+- Create: `plugins/agent-loop/templates/CONTRIBUTING.md`
+- Create: `plugins/agent-loop/templates/gitmessage`
 
 **Interfaces:**
-- Produces: `init.sh` exposing shell functions `drop_files <target_dir>` and `create_labels`, and a `main` guarded so the file is sourceable in tests (`main` runs only when executed directly). `drop_files` is non-destructive (`cp -n`). Task 3 consumes `create_labels` and wires the command.
+- Produces: `init.sh` exposing shell functions `drop_files <target_dir>`, `set_commit_template <target_dir>`, and `create_labels`, and a `main` guarded so the file is sourceable in tests (`main` runs only when executed directly). `drop_files` is non-destructive (`cp -n`) and drops five files (2 issue templates, marker, `CONTRIBUTING.md`, `.gitmessage`). Task 3 consumes `create_labels`/`set_commit_template` and wires the command.
 
 - [ ] **Step 1: Write the template sources**
 
@@ -168,6 +173,14 @@ Create `plugins/agent-loop/templates/agent-loop.json`:
 }
 ```
 
+Then copy the repo's own commit-convention files in as template sources (they
+are the single source of truth — DRY):
+
+```bash
+cp CONTRIBUTING.md plugins/agent-loop/templates/CONTRIBUTING.md
+cp .gitmessage     plugins/agent-loop/templates/gitmessage
+```
+
 - [ ] **Step 2: Write the failing test**
 
 Create `plugins/agent-loop/scripts/test/init_test.sh`:
@@ -188,6 +201,8 @@ drop_files "$tmp"
 [ -f "$tmp/.github/ISSUE_TEMPLATE/work-item.md" ] || fail "work-item.md not dropped"
 [ -f "$tmp/.github/ISSUE_TEMPLATE/bug.md" ]       || fail "bug.md not dropped"
 [ -f "$tmp/.claude/agent-loop.json" ]             || fail "agent-loop.json not dropped"
+[ -f "$tmp/CONTRIBUTING.md" ]                      || fail "CONTRIBUTING.md not dropped"
+[ -f "$tmp/.gitmessage" ]                          || fail ".gitmessage not dropped"
 
 # --- non-destructive: does not overwrite an existing template ---
 echo "CUSTOM" > "$tmp/.github/ISSUE_TEMPLATE/work-item.md"
@@ -222,6 +237,8 @@ drop_files() {
   cp -n "$AGENT_LOOP_ROOT/templates/work-item.md" "$target/.github/ISSUE_TEMPLATE/work-item.md"
   cp -n "$AGENT_LOOP_ROOT/templates/bug.md"       "$target/.github/ISSUE_TEMPLATE/bug.md"
   cp -n "$AGENT_LOOP_ROOT/templates/agent-loop.json" "$target/.claude/agent-loop.json"
+  cp -n "$AGENT_LOOP_ROOT/templates/CONTRIBUTING.md" "$target/CONTRIBUTING.md"
+  cp -n "$AGENT_LOOP_ROOT/templates/gitmessage"      "$target/.gitmessage"
 }
 
 create_labels() {
@@ -232,9 +249,16 @@ create_labels() {
   gh label create bug     -c "D93F0B" -d "Fixing-mode incident; preempts todo"     --force
 }
 
+set_commit_template() {
+  local target="$1"
+  # Repo-local; commit.template does not travel with clones, so init sets it.
+  git -C "$target" config --local commit.template .gitmessage 2>/dev/null || true
+}
+
 main() {
   local target="${1:-$(pwd)}"
   drop_files "$target"
+  set_commit_template "$target"
   create_labels
   echo "agent-loop: initialized $target"
 }
@@ -289,8 +313,9 @@ Adopt the current repository into the agent-loop work queue.
    ```
 
 3. Report what it did: the labels created/updated (`todo`, `agent`, `blocked`,
-   `bug`) and the files dropped (`.github/ISSUE_TEMPLATE/work-item.md`,
-   `.github/ISSUE_TEMPLATE/bug.md`, `.claude/agent-loop.json`). Note that
+   `bug`), the files dropped (`.github/ISSUE_TEMPLATE/work-item.md`,
+   `.github/ISSUE_TEMPLATE/bug.md`, `.claude/agent-loop.json`, `CONTRIBUTING.md`,
+   `.gitmessage`), and that `commit.template` was set to `.gitmessage`. Note that
    existing files were left untouched (non-destructive).
 ```
 
@@ -313,10 +338,13 @@ gh repo create rsi-agent-loop-smoketest --private --source=. --remote=origin >/d
 AGENT_LOOP_ROOT=/Users/dfarr/RSI/agent-loop/plugins/agent-loop \
   bash /Users/dfarr/RSI/agent-loop/plugins/agent-loop/scripts/init.sh "$scratch"
 gh label list --json name --jq '.[].name' | sort | tr '\n' ' '
-ls .github/ISSUE_TEMPLATE/ .claude/
+ls .github/ISSUE_TEMPLATE/ .claude/ CONTRIBUTING.md .gitmessage
+git config --local --get commit.template
 ```
 
-Expected: label list includes `agent blocked bug todo`; the three files exist.
+Expected: labels include `agent blocked bug todo`; the issue templates,
+`.claude/agent-loop.json`, `CONTRIBUTING.md`, and `.gitmessage` all exist;
+`commit.template` prints `.gitmessage`.
 
 - [ ] **Step 4: Verify idempotency**
 
@@ -364,7 +392,8 @@ Update to pick up loop improvements: `/plugin marketplace update rsi-agent-loop`
 
 In any repo you want the loop to drain, run `/agent-loop-init`. It creates the
 kanban labels (`todo`/`agent`/`blocked`/`bug`), drops the work-item and bug
-issue templates, and writes a `.claude/agent-loop.json` marker. It is
+issue templates, a lean `CONTRIBUTING.md` + `.gitmessage` (and points
+`commit.template` at it), and writes a `.claude/agent-loop.json` marker. It is
 idempotent and never overwrites existing files.
 
 > Draining the queue (`/work-queue`) and the phase agents (grill-me,
@@ -385,7 +414,7 @@ git commit -m "docs: install and adopt-a-repo instructions"
 
 **Spec coverage (Plan 1's slice):**
 - Plugin scaffold + private marketplace → Task 1. ✅
-- Per-repo footprint (labels + marker + templates) → Tasks 2–3. ✅
+- Per-repo footprint (labels + marker + templates + CONTRIBUTING.md/.gitmessage + commit.template) → Tasks 2–3. ✅
 - Non-destructive / additive → Task 2 (`cp -n`, tested). ✅
 - Stack-agnostic init → no template scaffolding anywhere. ✅
 - Exact label set `todo/agent/blocked/bug` → Task 2 `create_labels`, asserted in Task 3. ✅
