@@ -46,6 +46,15 @@ stray_ci_refs | grep -q 'refs/heads/ci/issue-1' || fail "ci/issue-1 not on origi
 cleanup_ci_ref 1
 [ -z "$(stray_ci_refs)" ] || fail "ci/issue-1 not cleaned up"
 
+# --- publish_ci_ref is force: re-publishing over a diverged ci ref succeeds ---
+publish_ci_ref 2
+first_ci="$(git ls-remote origin 'refs/heads/ci/issue-2' | awk '{print $1}')"
+git commit -q --amend -m "C1': diverge from the pushed ci ref (Refs: #2)"   # rewrites HEAD off the old ci ref
+publish_ci_ref 2 || fail "force re-publish of diverged ci ref should succeed"
+second_ci="$(git ls-remote origin 'refs/heads/ci/issue-2' | awk '{print $1}')"
+[ "$first_ci" != "$second_ci" ] || fail "ci/issue-2 did not advance to the rebased HEAD"
+cleanup_ci_ref 2
+
 # --- land_ff_only: happy path (origin/main unchanged) ---
 sha="$(git rev-parse HEAD)"
 land_ff_only "$sha" || fail "ff-only land rejected on clean fast-forward"
