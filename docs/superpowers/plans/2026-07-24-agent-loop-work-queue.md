@@ -165,8 +165,11 @@ stray_ci_refs() { git ls-remote --heads origin 'ci/*' | awk '{print $2}'; }
 # Rebase local main onto origin/main right before gating (sync BEFORE, never after).
 sync_rebase() { git pull --rebase origin main; }
 
-# Publish the current commit as the CI ref for issue N (the gate artifact).
-publish_ci_ref() { git push origin "HEAD:refs/heads/ci/issue-$1"; }
+# Publish the current commit as the CI ref for issue N (a disposable per-attempt
+# artifact). Force is safe here — the never-force invariant applies to main only,
+# and this must succeed even when a re-gate rebased HEAD off the old ci ref, or a
+# stale ref survives a dead run.
+publish_ci_ref() { git push --force origin "HEAD:refs/heads/ci/issue-$1"; }
 
 # Fast-forward-only land of the gated SHA. Never forced. Non-zero ⇒ trunk moved.
 land_ff_only() { git push origin "$1:refs/heads/main"; }
