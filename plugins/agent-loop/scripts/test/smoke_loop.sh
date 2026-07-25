@@ -22,6 +22,11 @@ issue_url="$(gh issue create --title "smoke: add a line" --body "acceptance: fil
 N="${issue_url##*/}"
 
 # --- drive the plumbing path (no LLM) ---
+# GitHub has a ~1-2s read-after-write lag on `gh issue list`, so a just-created
+# issue may not be queryable yet. Wait for it to become visible before asserting.
+# (The real loop never creates-then-immediately-lists — this lag is a smoke-test
+# artifact, not a loop concern.)
+for _ in $(seq 1 15); do [ "$(pick_next)" = "$N" ] && break; sleep 1; done
 [ "$(pick_next)" = "$N" ] || fail "pick_next did not return the todo ($N)"
 base="$(git rev-parse origin/main)"
 claim "$N" "$base"
