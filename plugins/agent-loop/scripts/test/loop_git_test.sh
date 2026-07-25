@@ -75,10 +75,11 @@ git fetch -q origin main
 [ "$(git rev-parse origin/main)" = "$rebased" ] || fail "rebased SHA did not land"
 git merge-base --is-ancestor "$c3" HEAD && fail "pre-rebase SHA must not be trunk (gate-SHA==land-SHA)" || true
 
-# --- reset_soft_baseline: discard ungated commit, KEEP the diff staged ---
+# --- discard_to_baseline: drop ungated commit AND staged changes, CLEAN tree ---
 echo blocked-work > h.txt; git add h.txt; git commit -qm "C4: ungated (Refs: #3)"
-reset_soft_baseline
-[ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ] || fail "reset --soft did not return HEAD to origin/main"
-git diff --cached --name-only | grep -qx 'h.txt' || fail "reset --soft lost the staged diff"
+echo more-staged > i.txt; git add i.txt   # a staged change on top of the ungated commit
+discard_to_baseline
+[ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ] || fail "discard_to_baseline did not return HEAD to origin/main"
+[ -z "$(git status --porcelain)" ] || fail "discard_to_baseline left the tree dirty"
 
 echo "PASS (git: all model-Y invariants)"

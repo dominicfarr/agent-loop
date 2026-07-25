@@ -22,7 +22,7 @@ a library call.
 - `frozen` true or `open_bug_issue` non-empty → trunk is (or was) broken. Handle
   the incident FIRST: treat that `bug` as the claimed item and go to FIXING-MODE.
 - `local_ahead_of_origin` > 0 with no claimed item → ungated commits from a dead
-  run. Discard them: `reset_soft_baseline` then `git checkout -- .`.
+  run. Discard them: `discard_to_baseline`.
 - `stray_ci_refs` non-empty with no active gate → GC each: `cleanup_ci_ref <N>`.
 
 **1 · PICK.** If `working_tree_dirty`, STOP and report — a human is mid-edit;
@@ -62,7 +62,7 @@ not poll.
 
 **7 · BLOCKED.** State exactly what's needed (missing secret, ambiguous
 acceptance criteria, external dependency). Then `block "$N" "<what's needed>"`,
-`reset_soft_baseline`, `git checkout -- .` (discard the kept diff), and
+`discard_to_baseline` (abandon the partial work), and
 `cleanup_ci_ref "$N"` if you published one this run. Return to PICK.
 
 **FIXING-MODE (trunk red — Andon stop-the-line).** `freeze` immediately. If no

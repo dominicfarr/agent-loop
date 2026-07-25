@@ -35,8 +35,10 @@ land_ff_only() { git push origin "$1:refs/heads/main"; }
 # Delete the remote-only CI ref for issue N after landing.
 cleanup_ci_ref() { git push origin --delete "ci/issue-$1"; }
 
-# Discard ungated local commits but KEEP their diff staged (BLOCKED handoff).
-reset_soft_baseline() { git fetch -q origin main && git reset --soft origin/main; }
+# Discard ALL local divergence from origin/main — ungated commits AND their
+# working-tree/staged changes — leaving a clean tree at the trunk tip. Used by
+# RECOVER (dead-run leftovers) and BLOCKED (abandon partial work).
+discard_to_baseline() { git fetch -q origin main && git reset --hard origin/main; }
 
 # --- GitHub queue layer (gh) ---
 
@@ -91,14 +93,19 @@ read_local_gates() {
 }
 
 # --- CI-ref gate watch ---
-# Blocks until the ci/issue-N run finishes; non-zero if it is red or never appears.
+# Blocks until the ci/issue-N run for the CURRENT HEAD commit finishes; non-zero
+# if it is red or never appears. Binding to the pushed SHA is essential: a
+# re-gate force-pushes a new commit to the same ref, and an earlier attempt's
+# completed run must never be mistaken for this one — that could land un-gated code.
 watch_gate() {
-  local branch="ci/issue-$1" id= i
-  for i in $(seq 1 30); do
-    id="$(gh run list --branch "$branch" --limit 1 --json databaseId --jq '.[0].databaseId // empty')"
+  local branch="ci/issue-$1" want id= i
+  want="$(git rev-parse HEAD)"
+  for i in $(seq 1 60); do
+    id="$(gh run list --branch "$branch" --json databaseId,headSha \
+          --jq "map(select(.headSha == \"$want\")) | .[0].databaseId // empty")"
     [ -n "$id" ] && break
     sleep 2
   done
-  [ -n "$id" ] || { echo "agent-loop: no CI run appeared for $branch" >&2; return 2; }
+  [ -n "$id" ] || { echo "agent-loop: no CI run for $branch @ $want" >&2; return 2; }
   gh run watch "$id" --exit-status
 }

@@ -34,6 +34,12 @@ fi
 if [ "${1:-}" = "variable" ] && [ "${2:-}" = "get" ]; then
   [ -n "${FIX_VAR:-}" ] && { printf '%s' "$FIX_VAR"; exit 0; } || exit 1
 fi
+if [ "${1:-}" = "run" ] && [ "${2:-}" = "list" ]; then
+  emit "${FIX_RUNS:-[]}"; exit 0
+fi
+if [ "${1:-}" = "run" ] && [ "${2:-}" = "watch" ]; then
+  exit 0   # invocation already logged above
+fi
 exit 0
 EOF
 chmod +x "$bin/gh"
@@ -72,5 +78,21 @@ printf '{"gates":{"local":["npm test","npm run lint"]}}' > "$m"
 [ "$(read_local_gates "$m" | tr '\n' '|')" = "npm test|npm run lint|" ] || fail "read_local_gates list wrong"
 printf '{"version":1}' > "$m"
 [ -z "$(read_local_gates "$m")" ] || fail "read_local_gates should be empty when absent"
+
+# --- watch_gate binds to the CURRENT HEAD sha, never a stale run on the ref ---
+# Needs BOTH a real repo (git rev-parse HEAD) and the fake gh (run list/watch).
+repo="$(mktemp -d)"
+( cd "$repo" && git init -q && git config user.email a@b.c && git config user.name t \
+  && echo v0 > f.txt && git add f.txt && git commit -qm seed )
+cd "$repo"
+want="$(git rev-parse HEAD)"
+# FIX_RUNS holds a STALE run from a previous attempt (id 111, other sha) AND the
+# current run (id 222, headSha == want). The match is present, so the loop breaks
+# on iteration 1 — no sleeps, fast.
+export FIX_RUNS="[{\"databaseId\":111,\"headSha\":\"0000000000000000000000000000000000000000\"},{\"databaseId\":222,\"headSha\":\"$want\"}]"
+: > "$GH_LOG"
+watch_gate 7 || fail "watch_gate should succeed when the SHA-matched run is green"
+grep -qx 'run watch 222 --exit-status' "$GH_LOG" || fail "watch_gate must watch the SHA-matched run (222)"
+grep -q  'run watch 111'              "$GH_LOG" && fail "watch_gate must NOT watch the stale run (111)" || true
 
 echo "PASS (gh: all queue-layer functions)"
