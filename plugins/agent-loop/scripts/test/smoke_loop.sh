@@ -8,6 +8,17 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$HERE/../loop.sh"
 fail() { echo "FAIL: $1" >&2; exit 1; }
 
+# GitHub has a ~1-2s read-after-write lag on issue queries, so a just-written
+# change may not be readable yet. Poll until CMD's output equals WANT (up to
+# ~15s) before asserting. (The real loop never writes-then-immediately-reads —
+# this lag is a smoke-test artifact, not a loop concern.)
+wait_for() {
+  local want="$1"; shift
+  local _ got
+  for _ in $(seq 1 15); do got="$("$@")" || true; [ "$got" = "$want" ] && return 0; sleep 1; done
+  return 1
+}
+
 name="agent-loop-loop-smoketest-$$"
 work="$(mktemp -d)"; cd "$work"
 git init -q; git config user.email a@b.c; git config user.name t
@@ -22,15 +33,10 @@ issue_url="$(gh issue create --title "smoke: add a line" --body "acceptance: fil
 N="${issue_url##*/}"
 
 # --- drive the plumbing path (no LLM) ---
-# GitHub has a ~1-2s read-after-write lag on `gh issue list`, so a just-created
-# issue may not be queryable yet. Wait for it to become visible before asserting.
-# (The real loop never creates-then-immediately-lists — this lag is a smoke-test
-# artifact, not a loop concern.)
-for _ in $(seq 1 15); do [ "$(pick_next)" = "$N" ] && break; sleep 1; done
-[ "$(pick_next)" = "$N" ] || fail "pick_next did not return the todo ($N)"
+wait_for "$N" pick_next || fail "pick_next did not return the todo ($N)"
 base="$(git rev-parse origin/main)"
 claim "$N" "$base"
-[ "$(open_agent_issue)" = "$N" ] || fail "issue not claimed as agent"
+wait_for "$N" open_agent_issue || fail "issue not claimed as agent"
 
 echo "a change" >> README.md; git commit -qam "feat: smoke change (Refs: #$N)"
 sync_rebase
@@ -42,6 +48,6 @@ land_ff_only "$sha" || fail "ff-only land failed on green trunk"
 cleanup_ci_ref "$N"
 [ -z "$(stray_ci_refs)" ] || fail "CI ref not cleaned up after land"
 close_item "$N" "landed $sha"
-[ "$(gh issue view "$N" --json state --jq .state)" = "CLOSED" ] || fail "issue not closed"
+wait_for CLOSED gh issue view "$N" --json state --jq .state || fail "issue not closed"
 
 echo "PASS (smoke: end-to-end plumbing against $name)"
