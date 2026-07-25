@@ -10,8 +10,8 @@ bash library and the LLM only orchestrating and making judgment calls.
 **Architecture:** Same split as Plan 1's `init`: a thin slash command
 (`/agent-loop-work`) sources a deterministic, testable bash library
 (`scripts/loop.sh`) for every mechanical operation — issue selection, label
-transitions, the CI-ref lifecycle, fast-forward-only landing, `reset --soft`
-recovery, and the freeze primitive. The library's model-Y **git** invariants are
+transitions, the CI-ref lifecycle, fast-forward-only landing, hard-reset
+discard/recovery, and the freeze primitive. The library's model-Y **git** invariants are
 unit-tested offline against local bare repos; its **gh** wrappers are tested by
 stubbing `gh` on `PATH`; the assembled loop is proven end-to-end by a plumbing
 smoke test against a throwaway GitHub repo. The command markdown is the
@@ -22,6 +22,17 @@ orchestrator prompt that calls these functions and owns only the judgment calls
 sourced function library), `git` plumbing, `gh` CLI (issues, labels, variables,
 `run watch`), `jq` (marker + issue JSON), plain-bash test harness (bare-repo
 fixtures + a stubbed `gh`).
+
+> **Amendments (post-implementation, from review).** The listings below were
+> corrected to match the shipped, reviewed code: (1) `issue_has_label` uses a
+> single `gh --jq` expression (real `gh` takes one); (2) `publish_ci_ref`
+> **force**-pushes the disposable `ci/*` ref (never `main`) so re-gate and
+> stale-ref recovery work; (3) `watch_gate` binds to the gated HEAD SHA so a
+> re-gate never mistakes an earlier attempt's run for this one (would land
+> un-gated code); (4) `discard_to_baseline` (`git reset --hard`) replaced
+> `reset_soft_baseline` on the RECOVER/BLOCKED discard paths — soft-reset left
+> the tree dirty and wedged the loop. `loop.sh` and its tests are the source of
+> truth.
 
 ## Global Constraints
 
@@ -55,7 +66,7 @@ fixtures + a stubbed `gh`).
 the `agent-loop-*` flat command convention Plan 1 established with
 `/agent-loop-init`). The library exposes: `working_tree_dirty`,
 `local_ahead_of_origin`, `stray_ci_refs`, `sync_rebase`, `publish_ci_ref`,
-`land_ff_only`, `cleanup_ci_ref`, `reset_soft_baseline`, `pick_next`,
+`land_ff_only`, `cleanup_ci_ref`, `discard_to_baseline`, `pick_next`,
 `open_agent_issue`, `open_bug_issue`, `issue_has_label`, `claim`, `block`,
 `close_item`, `file_bug`, `frozen`, `freeze`, `unfreeze`, `read_local_gates`,
 `watch_gate`.
@@ -77,7 +88,7 @@ the `agent-loop-*` flat command convention Plan 1 established with
   `publish_ci_ref N` (push `HEAD` to `origin refs/heads/ci/issue-N`),
   `land_ff_only SHA` (ff-only push `SHA` to `origin main`; non-zero ⇒ trunk moved),
   `cleanup_ci_ref N` (delete remote `ci/issue-N`),
-  `reset_soft_baseline` (`git reset --soft origin/main`).
+  `discard_to_baseline` (`git reset --hard origin/main` — clean tree).
   Task 2 appends the gh half to the same file; Task 3's command sources it.
 
 - [ ] **Step 1: Write the failing test (setup helper + working-tree + ahead-of-origin)**
@@ -177,8 +188,10 @@ land_ff_only() { git push origin "$1:refs/heads/main"; }
 # Delete the remote-only CI ref for issue N after landing.
 cleanup_ci_ref() { git push origin --delete "ci/issue-$1"; }
 
-# Discard ungated local commits but KEEP their diff staged (BLOCKED handoff).
-reset_soft_baseline() { git fetch -q origin main && git reset --soft origin/main; }
+# Discard ALL local divergence from origin/main — ungated commits AND their
+# working-tree/staged changes — leaving a clean tree at the trunk tip. Used by
+# RECOVER (dead-run leftovers) and BLOCKED (abandon partial work).
+discard_to_baseline() { git fetch -q origin main && git reset --hard origin/main; }
 ```
 
 - [ ] **Step 4: Run the test to verify it passes**
@@ -217,11 +230,12 @@ git fetch -q origin main
 [ "$(git rev-parse origin/main)" = "$rebased" ] || fail "rebased SHA did not land"
 git merge-base --is-ancestor "$c3" HEAD && fail "pre-rebase SHA must not be trunk (gate-SHA==land-SHA)" || true
 
-# --- reset_soft_baseline: discard ungated commit, KEEP the diff staged ---
+# --- discard_to_baseline: drop ungated commit AND staged changes, clean tree ---
 echo blocked-work > h.txt; git add h.txt; git commit -qm "C4: ungated (Refs: #3)"
-reset_soft_baseline
-[ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ] || fail "reset --soft did not return HEAD to origin/main"
-git diff --cached --name-only | grep -qx 'h.txt' || fail "reset --soft lost the staged diff"
+echo more > i.txt; git add i.txt   # a staged change on top of the ungated commit
+discard_to_baseline
+[ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ] || fail "discard did not return HEAD to origin/main"
+[ -z "$(git status --porcelain)" ] || fail "discard left the tree dirty"
 
 echo "PASS (git: all model-Y invariants)"
 ```
@@ -399,15 +413,20 @@ read_local_gates() {
 }
 
 # --- CI-ref gate watch ---
-# Blocks until the ci/issue-N run finishes; non-zero if it is red or never appears.
+# Blocks until the ci/issue-N run for the CURRENT HEAD commit finishes; non-zero
+# if it is red or never appears. Binding to the pushed SHA is essential: a
+# re-gate force-pushes a new commit to the same ref, and an earlier attempt's
+# completed run must never be mistaken for this one — that could land un-gated code.
 watch_gate() {
-  local branch="ci/issue-$1" id= i
-  for i in $(seq 1 30); do
-    id="$(gh run list --branch "$branch" --limit 1 --json databaseId --jq '.[0].databaseId // empty')"
+  local branch="ci/issue-$1" want id= i
+  want="$(git rev-parse HEAD)"
+  for i in $(seq 1 60); do
+    id="$(gh run list --branch "$branch" --json databaseId,headSha \
+          --jq "map(select(.headSha == \"$want\")) | .[0].databaseId // empty")"
     [ -n "$id" ] && break
     sleep 2
   done
-  [ -n "$id" ] || { echo "agent-loop: no CI run appeared for $branch" >&2; return 2; }
+  [ -n "$id" ] || { echo "agent-loop: no CI run for $branch @ $want" >&2; return 2; }
   gh run watch "$id" --exit-status
 }
 ```
@@ -565,7 +584,7 @@ a library call.
 - `frozen` true or `open_bug_issue` non-empty → trunk is (or was) broken. Handle
   the incident FIRST: treat that `bug` as the claimed item and go to FIXING-MODE.
 - `local_ahead_of_origin` > 0 with no claimed item → ungated commits from a dead
-  run. Discard them: `reset_soft_baseline` then `git checkout -- .`.
+  run. Discard them: `discard_to_baseline`.
 - `stray_ci_refs` non-empty with no active gate → GC each: `cleanup_ci_ref <N>`.
 
 **1 · PICK.** If `working_tree_dirty`, STOP and report — a human is mid-edit;
@@ -605,7 +624,7 @@ not poll.
 
 **7 · BLOCKED.** State exactly what's needed (missing secret, ambiguous
 acceptance criteria, external dependency). Then `block "$N" "<what's needed>"`,
-`reset_soft_baseline`, `git checkout -- .` (discard the kept diff), and
+`discard_to_baseline` (drop the partial work, clean tree), and
 `cleanup_ci_ref "$N"` if you published one this run. Return to PICK.
 
 **FIXING-MODE (trunk red — Andon stop-the-line).** `freeze` immediately. If no
@@ -693,7 +712,7 @@ git commit -m "docs: document /agent-loop-work"
 - Kanban states / WIP=1 / priority (bug preempts todo, FIFO) → Task 2 `pick_next`/`open_agent_issue` + Task 3 RECOVER/PICK. ✅
 - Two-tier failure → Task 3 GATE (per-item: fix-forward/block) vs. FIXING-MODE (trunk). ✅
 - Fixing-mode (freeze → bug → preempt → gated fix → unfreeze; best-effort recovery) → Task 2 `frozen/freeze/unfreeze/file_bug` + Task 3 FIXING-MODE & RECOVER. ✅
-- Guardrails (reset --soft on block; recover ungated commits + stray ci refs; dirty-tree guard; ff-only) → Task 1 `reset_soft_baseline`/`local_ahead_of_origin`/`stray_ci_refs`/`working_tree_dirty`/`land_ff_only`, wired in Task 3. ✅
+- Guardrails (hard-reset discard on block; recover ungated commits + stray ci refs; dirty-tree guard; ff-only) → Task 1 `discard_to_baseline`/`local_ahead_of_origin`/`stray_ci_refs`/`working_tree_dirty`/`land_ff_only`, wired in Task 3. ✅
 - Gates author-your-own, self-declaring; local via marker-config list → Task 2 `read_local_gates` + `watch_gate`, `gates.local` seam; Task 4 docs. ✅
 - Phase agents (grill-me, walking-skeleton), TDD dispatch → **intentionally out of Plan 2** (Plan 3); IMPLEMENT is a direct test-first step with a forward pointer.
 
@@ -704,7 +723,7 @@ expected output. IMPLEMENT's "implement directly" is a deliberate v1 behavior
 **Type/name consistency:** function names are identical across the library
 (Tasks 1–2), the tests, the smoke test, and the command (Task 3):
 `working_tree_dirty`, `local_ahead_of_origin`, `stray_ci_refs`, `sync_rebase`,
-`publish_ci_ref`, `land_ff_only`, `cleanup_ci_ref`, `reset_soft_baseline`,
+`publish_ci_ref`, `land_ff_only`, `cleanup_ci_ref`, `discard_to_baseline`,
 `pick_next`, `open_agent_issue`, `open_bug_issue`, `issue_has_label`, `claim`,
 `block`, `close_item`, `file_bug`, `frozen`/`freeze`/`unfreeze`,
 `read_local_gates`, `watch_gate`. Command `/agent-loop-work`; library path
