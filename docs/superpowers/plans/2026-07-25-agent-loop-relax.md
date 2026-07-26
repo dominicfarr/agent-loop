@@ -498,6 +498,68 @@ Expected: the runner executes, `ALL GREEN`, `gate exit=0`.
 
 ---
 
+### Task 7: Bring the end-to-end smoke test into the relaxed model
+
+**Added during execution** — the original file structure omitted
+`smoke_loop.sh` (an opt-in, network-hitting plumbing test not globbed by
+`run-all.sh`). Tasks 2–3 deleted functions it still calls, so it is now broken.
+
+**Files:**
+- Modify: `plugins/agent-loop/scripts/test/smoke_loop.sh`
+
+**Interfaces:**
+- Consumes only surviving library functions: `pick_next`, `claim` (one arg), `open_agent_issue`, `sync_rebase`, `land` (no arg), `close_item`.
+
+- [ ] **Step 1: Replace the drive-the-plumbing section**
+
+In `plugins/agent-loop/scripts/test/smoke_loop.sh`, replace the block from
+`# --- drive the plumbing path (no LLM) ---` through the `close_item` /
+`wait_for CLOSED` lines (current lines 35–51) with:
+
+```bash
+# --- drive the plumbing path (no LLM) ---
+wait_for "$N" pick_next || fail "pick_next did not return the todo ($N)"
+claim "$N"
+wait_for "$N" open_agent_issue || fail "issue not claimed as agent"
+
+echo "a change" >> README.md; git commit -qam "feat: smoke change (Refs: #$N)"
+sync_rebase
+sha="$(git rev-parse HEAD)"
+land || fail "land failed on clean trunk"
+git fetch -q origin main
+[ "$(git rev-parse origin/main)" = "$sha" ] || fail "land did not advance origin/main"
+close_item "$N" "landed $sha"
+wait_for CLOSED gh issue view "$N" --json state --jq .state || fail "issue not closed"
+```
+
+(This drops the `ci/issue-N` publish/watch/cleanup dance and the recovery
+baseline arg to `claim`, matching the single-writer model: pick → claim →
+change → sync → land → close.)
+
+- [ ] **Step 2: Verify it references no deleted function and is syntactically valid**
+
+This test is opt-in (it creates a real GitHub repo) — do NOT run it. Verify statically:
+```bash
+bash -n plugins/agent-loop/scripts/test/smoke_loop.sh && echo "syntax ok"
+grep -nE 'publish_ci_ref|stray_ci_refs|land_ff_only|cleanup_ci_ref|watch_gate|local_ahead_of_origin|open_bug_issue|frozen|freeze|unfreeze' \
+  plugins/agent-loop/scripts/test/smoke_loop.sh && echo "STALE REF" || echo "clean"
+# every function the smoke test calls must exist in the library:
+source plugins/agent-loop/scripts/loop.sh
+for f in pick_next claim open_agent_issue sync_rebase land close_item; do
+  type "$f" >/dev/null 2>&1 || echo "MISSING: $f"
+done; echo "surface checked"
+```
+Expected: `syntax ok`, `clean`, `surface checked`, no `MISSING:` lines.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add plugins/agent-loop/scripts/test/smoke_loop.sh
+git commit -m "test(loop): bring the e2e smoke test into the single-writer model"
+```
+
+---
+
 ## Self-Review
 
 **Spec coverage** (against the agreed keep/delete model):
