@@ -34,19 +34,15 @@ N="${issue_url##*/}"
 
 # --- drive the plumbing path (no LLM) ---
 wait_for "$N" pick_next || fail "pick_next did not return the todo ($N)"
-base="$(git rev-parse origin/main)"
-claim "$N" "$base"
+claim "$N"
 wait_for "$N" open_agent_issue || fail "issue not claimed as agent"
 
 echo "a change" >> README.md; git commit -qam "feat: smoke change (Refs: #$N)"
 sync_rebase
-publish_ci_ref "$N"
-stray_ci_refs | grep -q "ci/issue-$N" || fail "CI ref not published"
-
 sha="$(git rev-parse HEAD)"
-land_ff_only "$sha" || fail "ff-only land failed on green trunk"
-cleanup_ci_ref "$N"
-[ -z "$(stray_ci_refs)" ] || fail "CI ref not cleaned up after land"
+land || fail "land failed on clean trunk"
+git fetch -q origin main
+[ "$(git rev-parse origin/main)" = "$sha" ] || fail "land did not advance origin/main"
 close_item "$N" "landed $sha"
 wait_for CLOSED gh issue view "$N" --json state --jq .state || fail "issue not closed"
 

@@ -26,21 +26,25 @@ idempotent and never overwrites existing files.
 
 In an adopted repo, run `/agent-loop-work` to make one pass of the loop. It
 recovers any interrupted run, claims the oldest `bug` (else oldest `todo`) with
-WIP=1, implements it on trunk test-first, gates the change on your `ci/**`
-workflows, and lands it **fast-forward-only** — so the commit that passed the
-gate is exactly the commit on `main`. A per-item gate failure just blocks or
-fix-forwards (trunk stays green); a **trunk** failure trips fixing-mode
-(freeze → file a `bug` → gated revert/hotfix → unfreeze).
+WIP=1, implements it on trunk test-first, and lands it with a plain
+non-forced push.
 
-Author your own gates as `ci/**`-triggered workflows; the loop watches the
-aggregate run, so a new gate is enforced with no loop change. Optional fast local
-pre-checks go in `.claude/agent-loop.json` under `gates.local`.
+The loop runs a deliberately **single-writer** model: one agent, no concurrent
+writers, nothing consuming trunk. The one guard is self-preservation — a
+change's own tests must pass before it lands. Define that gate in
+`.claude/agent-loop.json` under `gates.local`: each listed command must exit `0`
+before a change lands (e.g. a script that runs your test suite). An empty
+`gates.local` opts out of gating entirely.
 
 ## Design & roadmap
 
-The full design — a trunk-based loop with pre-push gating, self-healing on trunk
-breakage, and a phased spine of tuned agents (grill-me, walking-skeleton) and
-cross-cutting skills (TDD) — lives in
+The loop shipped as a deliberately lean **single-writer** model: local tests
+gate each change and it lands with a plain push (see the
+[relax plan](docs/superpowers/plans/2026-07-25-agent-loop-relax.md)). The
+original design explored heavier machinery with CI-gating and trunk-breakage
+recovery; that was cut as unnecessary for a single writer and now reads as
+historical context in
 [the design spec](docs/superpowers/specs/2026-07-24-agent-loop-design.md), with
 deferred scope in [feature-ideas](docs/feature-ideas.md). Adoption
-(`/agent-loop-init`) ships first; the phase agents (grill-me, walking-skeleton) follow in Plan 3.
+(`/agent-loop-init`) shipped first; the phased spine of tuned agents (grill-me,
+walking-skeleton) and cross-cutting skills (TDD) follow in Plan 3.

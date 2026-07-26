@@ -35,8 +35,14 @@ Adopt the current repository into the agent-loop work queue.
 
    - If the user declines, relay the manual command above and stop.
 
+   Once a GitHub repo exists, the bootstrap also **establishes trunk**: on a
+   virgin repo (no commits yet) it commits the dropped scaffolding and pushes it
+   as `origin/main`, so the work loop has the baseline it gates against. A repo
+   that already has history keeps its own trunk untouched.
+
 3. Report what was created/updated: labels (`todo`/`agent`/`blocked`/`bug`), the
    files dropped (`.github/ISSUE_TEMPLATE/work-item.md`,
    `.github/ISSUE_TEMPLATE/bug.md`, `.claude/agent-loop.json`, `CONTRIBUTING.md`,
-   `.gitmessage`), and that `commit.template` was set to `.gitmessage`. Existing
-   files are left untouched (non-destructive).
+   `.gitmessage`), that `commit.template` was set to `.gitmessage`, and — for a
+   virgin repo — that trunk was established at `origin/main`. Existing files and
+   existing history are left untouched (non-destructive).

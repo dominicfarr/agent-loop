@@ -38,6 +38,21 @@ has_github_repo() { gh repo view --json nameWithOwner >/dev/null 2>&1; }
 # True if an 'origin' remote is configured (offline-safe).
 has_remote() { git remote get-url origin >/dev/null 2>&1; }
 
+# Give the work loop the origin/main baseline it presupposes. On a *virgin* repo
+# (no commits yet), commit the freshly-dropped scaffolding and push it as trunk.
+# A repo that already has history keeps its own trunk untouched — we never sweep a
+# user's working tree into a bootstrap commit.
+establish_trunk() {
+  local target="$1"
+  git -C "$target" rev-parse --verify -q HEAD >/dev/null 2>&1 && return 0
+  git -C "$target" add -A
+  git -C "$target" commit -q \
+    -m "chore: bootstrap agent-loop scaffolding" \
+    -m "Establish trunk so the work loop has an origin/main baseline to gate against."
+  git -C "$target" branch -M main
+  git -C "$target" push -u -q origin main
+}
+
 create_labels() {
   # --force makes this idempotent (create or update); colours/descriptions fixed.
   gh label create todo    -c "0E8A16" -d "Ready for the agent to pick up"          --force
@@ -60,7 +75,8 @@ main() {
   # in a subshell cd'd into the target (never changes the caller's cwd).
   if ( cd "$target" && has_github_repo ); then
     ( cd "$target" && create_labels )
-    echo "agent-loop: initialized $target (git, files, commit-template, labels)"
+    establish_trunk "$target"
+    echo "agent-loop: initialized $target (git, files, commit-template, labels, trunk)"
   elif ( cd "$target" && has_remote ); then
     echo "agent-loop: local init complete for $target (git, files, commit-template)."
     echo "An 'origin' remote exists but GitHub can't resolve it (auth or offline?)."

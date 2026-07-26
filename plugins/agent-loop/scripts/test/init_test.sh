@@ -28,6 +28,36 @@ ensure_git "$bare"
 [ -d "$bare/.git" ] || fail "ensure_git did not create .git"
 rm -rf "$bare"
 
+# --- establish_trunk: a virgin repo gets its scaffolding pushed as origin/main ---
+# The work loop presupposes an origin/main baseline; init must leave one behind.
+origin="$(mktemp -d)"; git init -q --bare "$origin"
+virgin="$(mktemp -d)"
+git init -q "$virgin"
+git -C "$virgin" config user.email "test@agent-loop"; git -C "$virgin" config user.name "test"
+git -C "$virgin" remote add origin "$origin"
+drop_files "$virgin"
+establish_trunk "$virgin" || fail "establish_trunk aborted on a virgin repo"
+git -C "$virgin" rev-parse --verify -q HEAD >/dev/null 2>&1 \
+  || fail "establish_trunk did not create the initial commit"
+git ls-remote --exit-code --heads "$origin" main >/dev/null 2>&1 \
+  || fail "establish_trunk did not establish origin/main"
+rm -rf "$origin" "$virgin"
+
+# --- establish_trunk: a repo that already has history is left untouched ---
+# Never sweep a user's working tree into a bootstrap commit.
+origin2="$(mktemp -d)"; git init -q --bare "$origin2"
+existing="$(mktemp -d)"
+git init -q "$existing"
+git -C "$existing" config user.email "test@agent-loop"; git -C "$existing" config user.name "test"
+git -C "$existing" remote add origin "$origin2"
+git -C "$existing" commit -q --allow-empty -m "pre-existing history"
+before="$(git -C "$existing" rev-list --count HEAD)"
+drop_files "$existing"
+establish_trunk "$existing" || fail "establish_trunk aborted on a repo with history"
+after="$(git -C "$existing" rev-list --count HEAD)"
+[ "$before" = "$after" ] || fail "establish_trunk created a commit on a repo with history"
+rm -rf "$origin2" "$existing"
+
 # --- main on a repo with NO remote: local success, labels pending, exit 0 ---
 noremote="$(mktemp -d)"
 out="$( main "$noremote" 2>&1 )" || fail "main aborted on a no-remote repo"

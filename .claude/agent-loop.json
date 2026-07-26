@@ -1,0 +1,9 @@
+{
+  "adoptedBy": "agent-loop",
+  "version": 1,
+  "gates": {
+    "local": [
+      "bash plugins/agent-loop/scripts/test/run-all.sh"
+    ]
+  }
+}
