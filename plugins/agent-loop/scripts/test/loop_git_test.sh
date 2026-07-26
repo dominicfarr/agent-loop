@@ -33,53 +33,44 @@ setup
 working_tree_dirty && fail "clean tree reported dirty"
 echo edit >> f.txt
 working_tree_dirty || fail "dirty tree reported clean"
-git checkout -q -- f.txt   # back to clean
+git checkout -q -- f.txt
 
-# --- local_ahead_of_origin ---
-[ "$(local_ahead_of_origin)" = "0" ] || fail "expected 0 ahead after clone"
+# --- land: non-forced push advances origin/main to local HEAD ---
 echo v1 > f.txt; git commit -qam "C1: local work (Refs: #1)"
-[ "$(local_ahead_of_origin)" = "1" ] || fail "expected 1 ahead after local commit"
-
-# --- publish_ci_ref / stray_ci_refs / cleanup_ci_ref ---
-publish_ci_ref 1
-stray_ci_refs | grep -q 'refs/heads/ci/issue-1' || fail "ci/issue-1 not on origin"
-cleanup_ci_ref 1
-[ -z "$(stray_ci_refs)" ] || fail "ci/issue-1 not cleaned up"
-
-# --- publish_ci_ref is force: re-publishing over a diverged ci ref succeeds ---
-publish_ci_ref 2
-first_ci="$(git ls-remote origin 'refs/heads/ci/issue-2' | awk '{print $1}')"
-git commit -q --amend -m "C1': diverge from the pushed ci ref (Refs: #2)"   # rewrites HEAD off the old ci ref
-publish_ci_ref 2 || fail "force re-publish of diverged ci ref should succeed"
-second_ci="$(git ls-remote origin 'refs/heads/ci/issue-2' | awk '{print $1}')"
-[ "$first_ci" != "$second_ci" ] || fail "ci/issue-2 did not advance to the rebased HEAD"
-cleanup_ci_ref 2
-
-# --- land_ff_only: happy path (origin/main unchanged) ---
 sha="$(git rev-parse HEAD)"
-land_ff_only "$sha" || fail "ff-only land rejected on clean fast-forward"
+land || fail "land rejected on a clean fast-forward"
 git fetch -q origin main
 [ "$(git rev-parse origin/main)" = "$sha" ] || fail "origin/main is not the landed SHA"
 
-# --- land_ff_only: reject when trunk moved under us ---
-echo v2 > f.txt; git commit -qam "C3: more local work (Refs: #2)"
-c3="$(git rev-parse HEAD)"
-advance_origin
-if land_ff_only "$c3"; then fail "ff-only land should have been REJECTED (trunk moved)"; fi
+# --- land is refspec-safe under zsh (the /agent-loop-work shell) ---
+# land uses a literal HEAD, so no $var:refs adjacency can trip zsh's :r modifier.
+if command -v zsh >/dev/null 2>&1; then
+  echo v2 > f.txt; git commit -qam "C2: zsh land (Refs: #1)"
+  z="$(git rev-parse HEAD)"
+  LOOP="$HERE/../loop.sh" zsh -c 'source "$LOOP"; land' \
+    || fail "land failed when the library is sourced under zsh"
+  git fetch -q origin main
+  [ "$(git rev-parse origin/main)" = "$z" ] || fail "zsh land did not advance origin/main"
+else
+  echo "note: zsh not found — skipping zsh land guard" >&2
+fi
 
-# --- sync_rebase then land: the mid-flight-move recovery ---
+# --- sync_rebase: pull a trunk that advanced, keeping local work on top ---
+git clone -q "$root/origin.git" "$root/other"
+( cd "$root/other" && git config user.email x@y.z && git config user.name o \
+  && echo moved > g.txt && git add g.txt && git commit -qm "C3: trunk moved" \
+  && git push -q origin HEAD:main )
+echo local3 > f.txt; git commit -qam "C4: local work (Refs: #2)"
 sync_rebase
-rebased="$(git rev-parse HEAD)"
-land_ff_only "$rebased" || fail "land after sync_rebase should succeed"
-git fetch -q origin main
-[ "$(git rev-parse origin/main)" = "$rebased" ] || fail "rebased SHA did not land"
-git merge-base --is-ancestor "$c3" HEAD && fail "pre-rebase SHA must not be trunk (gate-SHA==land-SHA)" || true
+git merge-base --is-ancestor "$(git rev-parse origin/main)" HEAD \
+  || fail "sync_rebase did not put local work on top of advanced trunk"
+land || fail "land after sync_rebase should succeed"
 
 # --- discard_to_baseline: drop ungated commit AND staged changes, CLEAN tree ---
-echo blocked-work > h.txt; git add h.txt; git commit -qm "C4: ungated (Refs: #3)"
-echo more-staged > i.txt; git add i.txt   # a staged change on top of the ungated commit
+echo blocked-work > h.txt; git add h.txt; git commit -qm "C5: ungated (Refs: #3)"
+echo more-staged > i.txt; git add i.txt
 discard_to_baseline
 [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ] || fail "discard_to_baseline did not return HEAD to origin/main"
 [ -z "$(git status --porcelain)" ] || fail "discard_to_baseline left the tree dirty"
 
-echo "PASS (git: all model-Y invariants)"
+echo "PASS (git: single-writer land/sync/discard)"
