@@ -19,14 +19,6 @@ setup() {
   git branch -q --set-upstream-to=origin/main main 2>/dev/null || true
 }
 
-# A second, independent clone that can advance origin/main behind our back.
-advance_origin() {
-  git clone -q "$root/origin.git" "$root/other"
-  ( cd "$root/other" && git config user.email x@y.z && git config user.name o \
-    && echo moved > g.txt && git add g.txt && git commit -qm "C2: trunk moved" \
-    && git push -q origin HEAD:main )
-}
-
 setup
 
 # --- working_tree_dirty ---

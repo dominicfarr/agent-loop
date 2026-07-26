@@ -31,15 +31,6 @@ if [ "${1:-}" = "issue" ] && [ "${2:-}" = "view" ]; then
   view="${FIX_VIEW:-}"; [ -n "$view" ] || view='{"labels":[]}'
   emit "$view"; exit 0
 fi
-if [ "${1:-}" = "variable" ] && [ "${2:-}" = "get" ]; then
-  [ -n "${FIX_VAR:-}" ] && { printf '%s' "$FIX_VAR"; exit 0; } || exit 1
-fi
-if [ "${1:-}" = "run" ] && [ "${2:-}" = "list" ]; then
-  emit "${FIX_RUNS:-[]}"; exit 0
-fi
-if [ "${1:-}" = "run" ] && [ "${2:-}" = "watch" ]; then
-  exit 0   # invocation already logged above
-fi
 exit 0
 EOF
 chmod +x "$bin/gh"

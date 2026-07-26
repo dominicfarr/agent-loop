@@ -1,19 +1,17 @@
 ---
-name: Fixing-mode bug
-about: A trunk-breakage incident filed by the loop (or a human)
-title: "trunk red: "
+name: Bug
+about: A defect that preempts the queue (fixed before new todo items)
+title: ""
 labels: ["bug"]
 ---
 
-## What broke
-<!-- The failing gate / pipeline and its signal. -->
-
-## Trunk state
-<!-- Is the trunk frozen? Offending commit SHA. -->
+## What's broken
+<!-- The symptom, and how to reproduce it. -->
 
 ## Fix decision
-<!-- revert | hotfix — and why. -->
+<!-- revert the offending change | fix forward — and why. -->
 
 ## Acceptance criteria
-- [ ] pipeline green again
-- [ ] trunk unfrozen
+<!-- Each line verifiable. -->
+- [ ] a test reproduces the bug, then passes
+- [ ] the fix lands on trunk

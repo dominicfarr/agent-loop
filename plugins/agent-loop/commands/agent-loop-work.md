@@ -1,5 +1,5 @@
 ---
-description: Drain this repo's issue queue onto trunk (model-Y). Claims one item (WIP=1), implements it, gates on ci/**, lands fast-forward-only, and self-heals on trunk breakage. Idempotent per run.
+description: Drain this repo's issue queue onto trunk (single-writer). Claims one item (WIP=1), implements it test-first, gates on local tests, and lands with a plain push. Idempotent per run.
 allowed-tools: Bash(bash:*), Bash(git:*), Bash(gh:*), Bash(source:*), Bash(jq:*)
 ---
 
