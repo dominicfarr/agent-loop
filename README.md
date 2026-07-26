@@ -38,9 +38,13 @@ before a change lands (e.g. a script that runs your test suite). An empty
 
 ## Design & roadmap
 
-The full design — a trunk-based loop with pre-push gating, self-healing on trunk
-breakage, and a phased spine of tuned agents (grill-me, walking-skeleton) and
-cross-cutting skills (TDD) — lives in
+The loop shipped as a deliberately lean **single-writer** model: local tests
+gate each change and it lands with a plain push (see the
+[relax plan](docs/superpowers/plans/2026-07-25-agent-loop-relax.md)). The
+original design explored heavier machinery with CI-gating and trunk-breakage
+recovery; that was cut as unnecessary for a single writer and now reads as
+historical context in
 [the design spec](docs/superpowers/specs/2026-07-24-agent-loop-design.md), with
 deferred scope in [feature-ideas](docs/feature-ideas.md). Adoption
-(`/agent-loop-init`) ships first; the phase agents (grill-me, walking-skeleton) follow in Plan 3.
+(`/agent-loop-init`) shipped first; the phased spine of tuned agents (grill-me,
+walking-skeleton) and cross-cutting skills (TDD) follow in Plan 3.
