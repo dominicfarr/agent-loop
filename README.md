@@ -26,15 +26,15 @@ idempotent and never overwrites existing files.
 
 In an adopted repo, run `/agent-loop-work` to make one pass of the loop. It
 recovers any interrupted run, claims the oldest `bug` (else oldest `todo`) with
-WIP=1, implements it on trunk test-first, gates the change on your `ci/**`
-workflows, and lands it **fast-forward-only** — so the commit that passed the
-gate is exactly the commit on `main`. A per-item gate failure just blocks or
-fix-forwards (trunk stays green); a **trunk** failure trips fixing-mode
-(freeze → file a `bug` → gated revert/hotfix → unfreeze).
+WIP=1, implements it on trunk test-first, and lands it with a plain
+non-forced push.
 
-Author your own gates as `ci/**`-triggered workflows; the loop watches the
-aggregate run, so a new gate is enforced with no loop change. Optional fast local
-pre-checks go in `.claude/agent-loop.json` under `gates.local`.
+The loop runs a deliberately **single-writer** model: one agent, no concurrent
+writers, nothing consuming trunk. The one guard is self-preservation — a
+change's own tests must pass before it lands. Define that gate in
+`.claude/agent-loop.json` under `gates.local`: each listed command must exit `0`
+before a change lands (e.g. a script that runs your test suite). An empty
+`gates.local` opts out of gating entirely.
 
 ## Design & roadmap
 
