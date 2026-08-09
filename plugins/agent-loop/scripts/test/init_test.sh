@@ -22,6 +22,19 @@ drop_files "$tmp"
 [ "$(cat "$tmp/.github/ISSUE_TEMPLATE/work-item.md")" = "CUSTOM" ] \
   || fail "drop_files overwrote an existing template"
 
+# --- found-vs-added report: every file `added:` on an empty target ---
+rep="$(mktemp -d)"
+out1="$(drop_files "$rep")"
+for f in .github/ISSUE_TEMPLATE/work-item.md .github/ISSUE_TEMPLATE/bug.md \
+         .claude/agent-loop.json CONTRIBUTING.md .gitmessage; do
+  printf '%s\n' "$out1" | grep -qx "added: $f" || fail "drop_files did not report 'added: $f'"
+done
+# --- ...and `exists:` for a file already present on a second drop ---
+out2="$(drop_files "$rep")"
+printf '%s\n' "$out2" | grep -qx "exists: CONTRIBUTING.md" \
+  || fail "drop_files did not report 'exists: CONTRIBUTING.md' on a second drop"
+rm -rf "$rep"
+
 # --- ensure_git initializes a bare (non-git) directory ---
 bare="$(mktemp -d)"
 ensure_git "$bare"

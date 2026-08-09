@@ -5,20 +5,28 @@ set -euo pipefail
 
 AGENT_LOOP_ROOT="${AGENT_LOOP_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 
+# $1=src $2=dst $3=relpath (for the found-vs-added report). Non-destructive and
+# portable: BSD `cp -n` returns non-zero when it skips an existing file, which
+# trips `set -e`, so guard on existence instead.
 copy_if_absent() {
-  # Non-destructive and portable: BSD `cp -n` returns non-zero when it skips an
-  # existing file, which trips `set -e`. Guard on existence instead.
-  [ -e "$2" ] || cp "$1" "$2"
+  if [ -e "$2" ]; then
+    echo "exists: $3"
+  else
+    cp "$1" "$2"
+    echo "added: $3"
+  fi
 }
 
+# Drops the five managed files, printing one `added:`/`exists:` line each so
+# adopters see exactly what init created vs. left untouched.
 drop_files() {
   local target="$1"
   mkdir -p "$target/.github/ISSUE_TEMPLATE" "$target/.claude"
-  copy_if_absent "$AGENT_LOOP_ROOT/templates/work-item.md"    "$target/.github/ISSUE_TEMPLATE/work-item.md"
-  copy_if_absent "$AGENT_LOOP_ROOT/templates/bug.md"          "$target/.github/ISSUE_TEMPLATE/bug.md"
-  copy_if_absent "$AGENT_LOOP_ROOT/templates/agent-loop.json" "$target/.claude/agent-loop.json"
-  copy_if_absent "$AGENT_LOOP_ROOT/templates/CONTRIBUTING.md" "$target/CONTRIBUTING.md"
-  copy_if_absent "$AGENT_LOOP_ROOT/templates/gitmessage"      "$target/.gitmessage"
+  copy_if_absent "$AGENT_LOOP_ROOT/templates/work-item.md"    "$target/.github/ISSUE_TEMPLATE/work-item.md" ".github/ISSUE_TEMPLATE/work-item.md"
+  copy_if_absent "$AGENT_LOOP_ROOT/templates/bug.md"          "$target/.github/ISSUE_TEMPLATE/bug.md"       ".github/ISSUE_TEMPLATE/bug.md"
+  copy_if_absent "$AGENT_LOOP_ROOT/templates/agent-loop.json" "$target/.claude/agent-loop.json"             ".claude/agent-loop.json"
+  copy_if_absent "$AGENT_LOOP_ROOT/templates/CONTRIBUTING.md" "$target/CONTRIBUTING.md"                     "CONTRIBUTING.md"
+  copy_if_absent "$AGENT_LOOP_ROOT/templates/gitmessage"      "$target/.gitmessage"                         ".gitmessage"
 }
 
 set_commit_template() {
