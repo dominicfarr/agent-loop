@@ -4,3 +4,6 @@
 # Editor / OS cruft
 *.swp
 *~
+
+# Local test capture (not part of the repo)
+logs.txt
