@@ -59,6 +59,27 @@ grep -q  'issue comment 5 --body agent-loop: BLOCKED. needs a secret' "$GH_LOG" 
 [ "$(FIX_VIEW='{"labels":[{"name":"bug"}]}' issue_has_label 5 bug)" = "true" ]  || fail "issue_has_label true case"
 [ "$(FIX_VIEW='{"labels":[{"name":"todo"}]}' issue_has_label 5 bug)" = "false" ] || fail "issue_has_label false case"
 
+# --- recovery_count: counts "recovery attempt" marker comments ---
+export FIX_VIEW='{"comments":[{"body":"agent-loop: claiming."},{"body":"agent-loop: recovery attempt 1"},{"body":"agent-loop: recovery attempt 2"}]}'
+[ "$(recovery_count 5)" = "2" ] || fail "recovery_count should count marker comments (2)"
+export FIX_VIEW='{"comments":[]}'
+[ "$(recovery_count 5)" = "0" ] || fail "recovery_count should be 0 when no marker comments"
+unset FIX_VIEW
+
+# --- recovery_exhausted: true at/above RECOVERY_LIMIT (block path), false below (resume path) ---
+export FIX_VIEW='{"comments":[{"body":"agent-loop: recovery attempt 1"},{"body":"agent-loop: recovery attempt 2"},{"body":"agent-loop: recovery attempt 3"}]}'
+RECOVERY_LIMIT=3 recovery_exhausted 5 || fail "recovery_exhausted should be true at the limit (block path)"
+export FIX_VIEW='{"comments":[{"body":"agent-loop: recovery attempt 1"},{"body":"agent-loop: recovery attempt 2"}]}'
+RECOVERY_LIMIT=3 recovery_exhausted 5 && fail "recovery_exhausted should be false below the limit (resume path)"
+[ "$(recovery_count 5)" = "2" ] && [ "${RECOVERY_LIMIT:-3}" = "3" ] || fail "RECOVERY_LIMIT should default to 3"
+
+# --- note_recovery_attempt: posts the next-numbered marker (count+1) ---
+: > "$GH_LOG"
+export FIX_VIEW='{"comments":[{"body":"agent-loop: recovery attempt 1"},{"body":"agent-loop: recovery attempt 2"}]}'
+note_recovery_attempt 5
+grep -qx 'issue comment 5 --body agent-loop: recovery attempt 3' "$GH_LOG" || fail "note_recovery_attempt should post the next marker (3)"
+unset FIX_VIEW
+
 # --- read_local_gates parses the marker (no gh involved) ---
 m="$bin/agent-loop.json"
 printf '{"gates":{"local":["npm test","npm run lint"]}}' > "$m"

@@ -21,9 +21,13 @@ freeze, no fast-forward choreography. The one guard is self-preservation —
 **a change's own tests must pass before it lands**, because this loop improves
 its own repo and a red commit breaks the next run.
 
-**0 · RECOVER.** `open_agent_issue` non-empty → a prior run crashed mid-item.
-`discard_to_baseline` (drop any partial commits/tree), then resume that issue as
-the claimed item — do not claim a new one (WIP=1).
+**0 · RECOVER.** `open_agent_issue` non-empty (call it `$N`) → a prior run
+crashed mid-item. Circuit-breaker first: if `recovery_exhausted "$N"` (it has hit
+`RECOVERY_LIMIT`, default 3), the item is poisoned — `block "$N" "circuit-breaker:
+recovered too many times without landing; needs a human."`, `discard_to_baseline`,
+and return to PICK. Otherwise `note_recovery_attempt "$N"`, `discard_to_baseline`
+(drop any partial commits/tree), and resume `$N` as the claimed item — do not
+claim a new one (WIP=1).
 
 **1 · PICK.** If `working_tree_dirty`, STOP and report — a human is mid-edit;
 never touch their tree. Otherwise `N="$(pick_next)"`. Empty → go to REPORT.

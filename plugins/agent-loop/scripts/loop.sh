@@ -65,6 +65,25 @@ close_item() { gh issue close "$1" --reason completed --comment "$2"; }
 
 file_bug() { gh issue create --title "$1" --body "$2" --label bug; }
 
+# --- crash-recovery circuit-breaker ---
+# A poisoned item that crashes the session mid-run is re-claimed and retried on
+# every subsequent RECOVER. Cap the retries so one bad item can't loop forever.
+
+# Number of "recovery attempt" marker comments on issue N (0 if none).
+recovery_count() {
+  gh issue view "$1" --json comments \
+    --jq '[.comments[]? | select(.body | startswith("agent-loop: recovery attempt"))] | length'
+}
+
+# True (exit 0) once issue N has reached RECOVERY_LIMIT (default 3, override via
+# env). RECOVER blocks the item instead of resuming when this is true.
+recovery_exhausted() { [ "$(recovery_count "$1")" -ge "${RECOVERY_LIMIT:-3}" ]; }
+
+# Record one more recovery attempt as a marker comment numbered count+1.
+note_recovery_attempt() {
+  gh issue comment "$1" --body "agent-loop: recovery attempt $(( $(recovery_count "$1") + 1 ))"
+}
+
 # --- local gates (config seam) ---
 # Prints each .gates.local[] command from the marker (one per line); empty if none.
 read_local_gates() {
