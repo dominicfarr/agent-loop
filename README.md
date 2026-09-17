@@ -8,11 +8,11 @@ it picks up the improvements.
 ## Install (per machine)
 
 ```
-/plugin marketplace add /Users/dfarr/RSI/agent-loop
-/plugin install agent-loop@rsi-agent-loop
+/plugin marketplace add agent-loop
+/plugin install agent-loop@agent-loop
 ```
 
-Update to pick up loop improvements: `/plugin marketplace update rsi-agent-loop`.
+Update to pick up loop improvements: `/plugin marketplace update agent-loop`.
 
 ## Adopt a repo
 
